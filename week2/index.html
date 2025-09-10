@@ -1,29 +1,118 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Content-Based Movie Recommender</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Colorful Movie Recommender</title>
+
+  <!-- Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <div class="container">
-        <h1>Content-Based Movie Recommender</h1>
-        <p>Select a movie you like, and we'll find similar ones for you!</p>
-        
-        <div class="controls">
-            <select id="movie-select">
-                <option value="" disabled selected>Select a movie</option>
-            </select>
-            <button id="recommend-btn" onclick="getRecommendations()">Get Recommendations</button>
-        </div>
-        
-        <div id="result-box">
-            <p id="result">Please wait, loading data...</p>
-        </div>
-    </div>
+  <div class="aurora" aria-hidden="true"></div>
 
-    <script src="data.js"></script>
-    <script src="script.js"></script>
-</body>
-</html>
+  <main class="page">
+    <section class="card" role="region" aria-labelledby="title">
+      <!-- Header -->
+      <header class="header">
+        <div>
+          <h1 id="title" class="title">Content-Based Movie Recommender</h1>
+          <p class="subtitle">Pick a movie you love — we’ll find similar titles using content vectors & cosine similarity.</p>
+        </div>
+        <div class="meta">🎬 Movie data from <code>data.js</code> · ⚡ Instant results · ♿ Accessible</div>
+      </header>
+
+      <!-- Controls -->
+      <div class="controls" role="group" aria-label="Recommendation controls">
+        <div class="select-wrap">
+          <label for="movie-select">Movie</label>
+          <select id="movie-select" aria-label="Select a movie">
+            <!-- Placeholder only; options added from data.js / script.js -->
+            <option value="" disabled selected>Select a movie</option>
+          </select>
+          <svg class="select-caret" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <button id="recommend-btn" class="btn" type="button" onclick="getRecommendations()">Get Recommendations</button>
+      </div>
+
+      <!-- Results -->
+      <section id="result-box" aria-live="polite" aria-busy="true">
+        <div id="result" class="status">Please wait, loading data...</div>
+
+        <!-- Skeletons while loading -->
+        <div id="skeletons" class="grid" style="margin-top:10px;">
+          <article class="movie">
+            <div class="poster skeleton"></div>
+            <div class="flex1">
+              <div class="skeleton line lg"></div>
+              <div class="skeleton line sm"></div>
+              <div class="skeleton pill"></div>
+            </div>
+            <div class="skeleton chip"></div>
+          </article>
+          <article class="movie">
+            <div class="poster skeleton"></div>
+            <div class="flex1">
+              <div class="skeleton line lg"></div>
+              <div class="skeleton line sm"></div>
+              <div class="skeleton pill"></div>
+            </div>
+            <div class="skeleton chip"></div>
+          </article>
+          <article class="movie">
+            <div class="poster skeleton"></div>
+            <div class="flex1">
+              <div class="skeleton line lg"></div>
+              <div class="skeleton line sm"></div>
+              <div class="skeleton pill"></div>
+            </div>
+            <div class="skeleton chip"></div>
+          </article>
+        </div>
+
+        <!-- Results grid (your script.js should populate) -->
+        <div id="results-grid" class="grid" hidden></div>
+      </section>
+
+      <p class="footer">Tip: try a popular title first for richer neighbors. ✨</p>
+    </section>
+  </main>
+
+  <!-- Your movie data & logic -->
+  <script src="data.js"></script>
+  <script src="script.js"></script>
+
+  <!-- Safe fallback: populate #movie-select from MOVIES[] if your script doesn't -->
+  <script>
+    (function () {
+      const select = document.getElementById('movie-select');
+      const result = document.getElementById('result');
+      const box = document.getElementById('result-box');
+
+      function populateFromMovies() {
+        if (!window.MOVIES || !Array.isArray(window.MOVIES)) return false;
+        // If only the placeholder exists, fill options
+        if (select.options.length <= 1) {
+          const frag = document.createDocumentFragment();
+          window.MOVIES.forEach((m, i) => {
+            // Accept both string titles or objects: {id, title}
+            const opt = document.createElement('option');
+            const value = (m.id ?? i).toString();
+            const label = (m.title ?? m.name ?? m).toString();
+            opt.value = value;
+            opt.textContent = label;
+            frag.appendChild(opt);
+          });
+          select.appendChild(frag);
+          return true;
+        }
+        return false;
+      }
+
+      // Try to populate soon after load, then clear loadin
