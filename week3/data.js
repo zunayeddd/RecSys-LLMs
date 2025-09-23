@@ -10,13 +10,13 @@ let numMovies = 0;
 async function loadData() {
     try {
         // Load movie data
-        const movieResponse = await fetch('https://raw.githubusercontent.com/tensorflow/tfjs-examples/master/movie-recommendation/data/u.item');
+        const movieResponse = await fetch('u.item');
         const movieText = await movieResponse.text();
         movies = parseItemData(movieText);
         numMovies = movies.length;
 
         // Load rating data
-        const ratingResponse = await fetch('https://raw.githubusercontent.com/tensorflow/tfjs-examples/master/movie-recommendation/data/u.data');
+        const ratingResponse = await fetch('u.data');
         const ratingText = await ratingResponse.text();
         ratings = parseRatingData(ratingText);
         
