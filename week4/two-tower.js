@@ -90,6 +90,7 @@ class TwoTowerModel {
     }
     
     getItemEmbeddings() {
-        return this.itemEmbeddings.arraySync();
+        // Return the tensor directly - call arraySync() on the tensor, not this method
+        return this.itemEmbeddings;
     }
 }
