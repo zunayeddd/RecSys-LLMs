@@ -54,8 +54,9 @@ class TwoTowerModel {
                 const logits = tf.matMul(userEmbs, itemEmbs, false, true);
                 
                 // Labels: diagonal elements are positives
+                // Use int32 tensor for oneHot indices
                 const labels = tf.oneHot(
-                    tf.range(0, userIndices.length), 
+                    tf.range(0, userIndices.length, 1, 'int32'), 
                     userIndices.length
                 );
                 
