@@ -45,6 +45,7 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .graph-container {
+            width: 100%;
             height: 500px;
             border: 1px solid #ddd;
             border-radius: 4px;
@@ -53,6 +54,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
+            margin-top: 10px;
         }
         th, td {
             padding: 8px 12px;
@@ -65,25 +67,26 @@
             font-weight: bold;
         }
         tr:hover {
-            background-color: #f8f9fa;
+            background-color: #f5f5f5;
         }
         .selected {
             background-color: #e3f2fd !important;
         }
         .node-info {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 4px;
             margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
         }
         .recommendation {
-            background: #e8f5e8;
-            padding: 15px;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e8f5e8;
             border-radius: 4px;
-            margin-top: 20px;
+            border-left: 4px solid #4caf50;
         }
         button {
-            background: #4285f4;
+            background-color: #4caf50;
             color: white;
             border: none;
             padding: 8px 16px;
@@ -92,13 +95,16 @@
             margin: 2px;
         }
         button:hover {
-            background: #3367d6;
+            background-color: #45a049;
         }
-        .controls {
-            margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-            align-items: center;
+        .tooltip {
+            position: absolute;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 4px;
+            pointer-events: none;
+            font-size: 12px;
         }
     </style>
 </head>
@@ -107,43 +113,33 @@
         <div class="header">
             <h1>PageRank Friend Recommendations</h1>
             <p>Interactive demonstration of PageRank algorithm for social network analysis</p>
+            <p>Click on any node in the graph or table row to see friend recommendations</p>
         </div>
         
-        <div class="controls">
-            <button id="computeBtn">Compute PageRank</button>
-            <span>Click any node to see friend recommendations</span>
-        </div>
-
         <div class="content">
             <div class="left-panel">
-                <h3>Network Visualization</h3>
+                <h2>Network Visualization</h2>
                 <div id="graph" class="graph-container"></div>
                 
                 <div id="nodeInfo" class="node-info" style="display: none;">
-                    <h4>Selected Node Information</h4>
+                    <h3>Node Information</h3>
                     <div id="currentFriends"></div>
-                </div>
-                
-                <div id="recommendations" class="recommendation" style="display: none;">
-                    <h4>Top 3 Recommended Friends</h4>
-                    <div id="recommendedFriends"></div>
+                    <div id="recommendations"></div>
                 </div>
             </div>
             
             <div class="right-panel">
-                <h3>PageRank Scores</h3>
-                <div style="max-height: 600px; overflow-y: auto;">
-                    <table id="scoresTable">
-                        <thead>
-                            <tr>
-                                <th>Node ID</th>
-                                <th>PageRank Score</th>
-                                <th>Friends Count</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tableBody"></tbody>
-                    </table>
-                </div>
+                <h2>PageRank Scores</h2>
+                <table id="scoresTable">
+                    <thead>
+                        <tr>
+                            <th>Node ID</th>
+                            <th>PageRank Score</th>
+                            <th>Friends</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
             </div>
         </div>
     </div>
