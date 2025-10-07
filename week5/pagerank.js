@@ -8,27 +8,45 @@ const pagerank = {
             nodeIndexMap[id] = index;
         });
         
-        // Build adjacency matrix
-        const adjacencyMatrix = Array(numNodes).fill().map(() => Array(numNodes).fill(0));
+        console.log('Node index map:', nodeIndexMap);
+        console.log('Graph edges:', graph.edges);
         
+        // Build adjacency matrix with proper initialization
+        const adjacencyMatrix = [];
+        for (let i = 0; i < numNodes; i++) {
+            adjacencyMatrix[i] = new Array(numNodes).fill(0);
+        }
+        
+        // Fill adjacency matrix
         graph.edges.forEach(edge => {
             const i = nodeIndexMap[edge.source];
             const j = nodeIndexMap[edge.target];
-            if (i !== undefined && j !== undefined) {
+            console.log(`Edge ${edge.source}->${edge.target} mapped to [${i},${j}]`);
+            
+            if (i !== undefined && j !== undefined && i < numNodes && j < numNodes) {
                 adjacencyMatrix[i][j] = 1;
                 adjacencyMatrix[j][i] = 1; // Undirected graph
+            } else {
+                console.warn(`Invalid edge indices: ${edge.source}->${edge.target} -> [${i},${j}]`);
             }
         });
         
+        console.log('Adjacency matrix:', adjacencyMatrix);
+        
         // Convert to column-stochastic matrix
         const stochasticMatrix = this.buildStochasticMatrix(adjacencyMatrix);
+        console.log('Stochastic matrix:', stochasticMatrix);
         
         // Initialize PageRank vector
-        let pagerankVector = tf.ones([numNodes, 1]).div(tf.scalar(numNodes));
+        const initialValue = 1 / numNodes;
+        let pagerankVector = tf.fill([numNodes, 1], initialValue);
         
         // Power iteration
-        const dampingVector = tf.ones([numNodes, 1]).div(tf.scalar(numNodes)).mul(tf.scalar(1 - dampingFactor));
+        const dampingValue = (1 - dampingFactor) / numNodes;
+        const dampingVector = tf.fill([numNodes, 1], dampingValue);
         const M = tf.tensor2d(stochasticMatrix);
+        
+        console.log('Starting PageRank iterations...');
         
         for (let iter = 0; iter < maxIterations; iter++) {
             pagerankVector = tf.tidy(() => {
@@ -36,6 +54,12 @@ const pagerank = {
                 const follow = M.matMul(pagerankVector).mul(tf.scalar(dampingFactor));
                 return teleport.add(follow);
             });
+            
+            // Normalize to ensure it sums to 1
+            if (iter % 10 === 0) {
+                const sum = pagerankVector.sum().dataSync()[0];
+                pagerankVector = pagerankVector.div(tf.scalar(sum));
+            }
         }
         
         // Convert to JavaScript object
@@ -44,6 +68,8 @@ const pagerank = {
         nodeIds.forEach((id, index) => {
             result[id] = scores[index];
         });
+        
+        console.log('PageRank results:', result);
         
         // Clean up tensors
         M.dispose();
@@ -55,10 +81,18 @@ const pagerank = {
     
     buildStochasticMatrix(adjacencyMatrix) {
         const numNodes = adjacencyMatrix.length;
-        const stochasticMatrix = Array(numNodes).fill().map(() => Array(numNodes).fill(0));
+        const stochasticMatrix = [];
+        
+        // Initialize stochastic matrix
+        for (let i = 0; i < numNodes; i++) {
+            stochasticMatrix[i] = new Array(numNodes).fill(0);
+        }
         
         for (let j = 0; j < numNodes; j++) {
-            const colSum = adjacencyMatrix.reduce((sum, row) => sum + row[j], 0);
+            let colSum = 0;
+            for (let i = 0; i < numNodes; i++) {
+                colSum += adjacencyMatrix[i][j];
+            }
             
             if (colSum > 0) {
                 for (let i = 0; i < numNodes; i++) {
