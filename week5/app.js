@@ -1,233 +1,236 @@
 // app.js
-class PageRankApp {
+class SocialNetworkApp {
     constructor() {
-        this.graph = null;
+        this.graphData = null;
         this.pageRankScores = null;
         this.selectedNode = null;
-        this.nodeData = [];
-        this.edgeData = [];
         
-        this.init();
+        this.initializeEventListeners();
     }
 
-    async init() {
-        try {
-            // Load the karate club dataset
-            await this.loadData('data/karate.csv');
-            
-            // Compute PageRank scores
-            this.pageRankScores = await computePageRank(this.nodeData, this.edgeData);
-            
-            // Update node data with PageRank scores
-            this.nodeData.forEach(node => {
-                node.pagerank = this.pageRankScores[node.id];
-            });
-            
-            // Initialize visualization
-            this.initGraph();
-            this.initTable();
-            
-        } catch (error) {
-            console.error('Error initializing app:', error);
-        }
+    initializeEventListeners() {
+        document.getElementById('loadData').addEventListener('click', () => this.loadDemoData());
+        document.getElementById('computePR').addEventListener('click', () => this.computePageRank());
     }
 
-    async loadData(filename) {
+    async loadDemoData() {
         try {
-            const response = await fetch(filename);
+            const response = await fetch('data/karate.csv');
             const csvText = await response.text();
-            this.parseCSV(csvText);
+            this.graphData = this.parseCSV(csvText);
+            
+            document.getElementById('computePR').disabled = false;
+            this.renderGraph();
+            this.showNotification('Demo data loaded successfully!', 'success');
         } catch (error) {
-            console.error('Error loading data:', error);
-            // Fallback to demo data if file not found
-            this.createDemoData();
+            this.showNotification('Error loading demo data: ' + error.message, 'error');
         }
     }
 
     parseCSV(csvText) {
         const lines = csvText.trim().split('\n');
-        const nodes = new Set();
         const edges = [];
+        const nodes = new Set();
+
+        // Skip header if exists, otherwise start from line 0
+        const startLine = lines[0].includes('source') ? 1 : 0;
         
-        // Skip header if exists, process each line
-        for (let i = (lines[0].includes('source') ? 1 : 0); i < lines.length; i++) {
+        for (let i = startLine; i < lines.length; i++) {
             const [source, target] = lines[i].split(',').map(val => val.trim());
             if (source && target) {
-                const sourceId = parseInt(source);
-                const targetId = parseInt(target);
-                
-                nodes.add(sourceId);
-                nodes.add(targetId);
-                edges.push({ source: sourceId, target: targetId });
+                edges.push({ source: parseInt(source), target: parseInt(target) });
+                nodes.add(parseInt(source));
+                nodes.add(parseInt(target));
             }
         }
-        
-        // Convert Set to Array and create node objects
-        this.nodeData = Array.from(nodes).map(id => ({ id }));
-        this.edgeData = edges;
-        
-        console.log(`Loaded ${this.nodeData.length} nodes and ${this.edgeData.length} edges`);
+
+        return {
+            nodes: Array.from(nodes).map(id => ({ id })),
+            edges: edges
+        };
     }
 
-    createDemoData() {
-        // Create a simple demo graph if data file is not found
-        this.nodeData = [
-            { id: 0 }, { id: 1 }, { id: 2 }, { id: 3 }, { id: 4 },
-            { id: 5 }, { id: 6 }, { id: 7 }, { id: 8 }, { id: 9 }
-        ];
-        
-        this.edgeData = [
-            { source: 0, target: 1 }, { source: 0, target: 2 }, { source: 0, target: 3 },
-            { source: 1, target: 4 }, { source: 1, target: 5 }, { source: 2, target: 6 },
-            { source: 3, target: 7 }, { source: 4, target: 8 }, { source: 5, target: 9 },
-            { source: 6, target: 7 }, { source: 7, target: 8 }, { source: 8, target: 9 }
-        ];
-        
-        console.log('Using demo data');
+    async computePageRank() {
+        if (!this.graphData) {
+            this.showNotification('Please load graph data first!', 'error');
+            return;
+        }
+
+        try {
+            this.showNotification('Computing PageRank...', 'info');
+            
+            // Convert graph to adjacency matrix format
+            const { nodes, edges } = this.graphData;
+            const nodeCount = nodes.length;
+            const nodeIndexMap = new Map();
+            nodes.forEach((node, index) => nodeIndexMap.set(node.id, index));
+
+            // Create adjacency matrix
+            const adjacencyMatrix = Array.from({ length: nodeCount }, () => 
+                Array.from({ length: nodeCount }, () => 0)
+            );
+
+            edges.forEach(edge => {
+                const sourceIdx = nodeIndexMap.get(edge.source);
+                const targetIdx = nodeIndexMap.get(edge.target);
+                adjacencyMatrix[sourceIdx][targetIdx] = 1;
+                adjacencyMatrix[targetIdx][sourceIdx] = 1; // Undirected graph
+            });
+
+            // Compute PageRank
+            this.pageRankScores = await computePageRankScores(adjacencyMatrix);
+            
+            // Update nodes with scores
+            nodes.forEach((node, index) => {
+                node.pagerank = this.pageRankScores[index];
+            });
+
+            this.updateTable();
+            this.updateGraphVisualization();
+            this.showNotification('PageRank computation completed!', 'success');
+        } catch (error) {
+            this.showNotification('Error computing PageRank: ' + error.message, 'error');
+        }
     }
 
-    initGraph() {
-        this.graph = new GraphVisualization(
-            'graph',
-            this.nodeData,
-            this.edgeData,
-            (node) => this.onNodeClick(node)
-        );
-    }
-
-    initTable() {
+    updateTable() {
         const tableBody = document.getElementById('tableBody');
         tableBody.innerHTML = '';
-        
-        // Sort nodes by PageRank score (descending)
-        const sortedNodes = [...this.nodeData].sort((a, b) => b.pagerank - a.pagerank);
-        
-        sortedNodes.forEach(node => {
+
+        const { nodes, edges } = this.graphData;
+
+        nodes.sort((a, b) => b.pagerank - a.pagerank);
+
+        nodes.forEach(node => {
             const row = document.createElement('tr');
             row.dataset.nodeId = node.id;
             
-            // Get current friends for this node
-            const friends = this.getFriends(node.id);
-            
+            // Get friends for this node
+            const friends = edges
+                .filter(edge => edge.source === node.id || edge.target === node.id)
+                .map(edge => edge.source === node.id ? edge.target : edge.source)
+                .sort((a, b) => a - b);
+
             row.innerHTML = `
                 <td>${node.id}</td>
-                <td>${node.pagerank.toFixed(4)}</td>
-                <td>${friends.map(f => f.id).join(', ')}</td>
+                <td>${node.pagerank ? node.pagerank.toFixed(4) : 'N/A'}</td>
+                <td>${friends.join(', ')}</td>
             `;
-            
-            row.addEventListener('click', () => this.onNodeClick(node));
+
+            row.addEventListener('click', () => this.selectNode(node.id));
             tableBody.appendChild(row);
         });
     }
 
-    getFriends(nodeId) {
-        const friends = new Set();
-        this.edgeData.forEach(edge => {
-            if (edge.source === nodeId) friends.add(edge.target);
-            if (edge.target === nodeId) friends.add(edge.source);
-        });
-        
-        return Array.from(friends).map(id => this.nodeData.find(node => node.id === id));
-    }
-
-    onNodeClick(node) {
-        this.selectedNode = node;
+    selectNode(nodeId) {
+        this.selectedNode = nodeId;
         
         // Update table selection
         document.querySelectorAll('#tableBody tr').forEach(row => {
-            row.classList.toggle('selected', parseInt(row.dataset.nodeId) === node.id);
+            row.classList.toggle('selected', parseInt(row.dataset.nodeId) === nodeId);
         });
-        
+
         // Update graph selection
-        if (this.graph) {
-            this.graph.highlightNode(node.id);
+        if (window.graphVisualization) {
+            window.graphVisualization.highlightNode(nodeId);
         }
-        
-        // Show node information
-        this.showNodeInfo(node);
+
+        this.showNodeInfo(nodeId);
     }
 
-    showNodeInfo(node) {
+    showNodeInfo(nodeId) {
         const nodeInfo = document.getElementById('nodeInfo');
-        const currentFriendsDiv = document.getElementById('currentFriends');
-        const recommendationsDiv = document.getElementById('recommendations');
-        
-        // Get current friends
-        const currentFriends = this.getFriends(node.id);
-        
-        // Get recommendations
-        const recommendations = this.getRecommendations(node.id);
-        
-        // Display current friends
-        currentFriendsDiv.innerHTML = `
-            <h4>Current Friends (${currentFriends.length})</h4>
-            <p>${currentFriends.map(f => `Node ${f.id} (Score: ${f.pagerank.toFixed(4)})`).join(', ')}</p>
-        `;
-        
-        // Display recommendations
-        if (recommendations.length > 0) {
-            recommendationsDiv.innerHTML = `
-                <h4>Top 3 Recommended Friends</h4>
-                ${recommendations.map(rec => `
-                    <div class="recommendation">
-                        <strong>Node ${rec.node.id}</strong> - Score: ${rec.node.pagerank.toFixed(4)}
-                        <button onclick="app.connectNodes(${node.id}, ${rec.node.id})">Connect</button>
-                    </div>
-                `).join('')}
-            `;
-        } else {
-            recommendationsDiv.innerHTML = '<p>No recommendations available</p>';
+        const currentFriends = document.getElementById('currentFriends');
+        const recommendations = document.getElementById('recommendations');
+
+        if (!this.graphData || !this.pageRankScores) {
+            nodeInfo.style.display = 'none';
+            return;
         }
+
+        const { nodes, edges } = this.graphData;
+        const node = nodes.find(n => n.id === nodeId);
         
+        if (!node) return;
+
+        // Get current friends
+        const friends = edges
+            .filter(edge => edge.source === nodeId || edge.target === nodeId)
+            .map(edge => edge.source === nodeId ? edge.target : edge.source);
+
+        currentFriends.innerHTML = `
+            <strong>Current Friends (${friends.length}):</strong><br>
+            ${friends.join(', ') || 'None'}
+        `;
+
+        // Get recommendations (top 3 non-friends by PageRank, excluding self)
+        const nonFriends = nodes
+            .filter(n => n.id !== nodeId && !friends.includes(n.id))
+            .sort((a, b) => b.pagerank - a.pagerank)
+            .slice(0, 3);
+
+        if (nonFriends.length > 0) {
+            recommendations.innerHTML = `
+                <strong>Recommended Friends:</strong><br>
+                ${nonFriends.map(n => 
+                    `Node ${n.id} (Score: ${n.pagerank.toFixed(4)}) 
+                    <button class="btn connect-btn" data-target="${n.id}">Connect</button>`
+                ).join('<br>')}
+            `;
+
+            // Add event listeners to connect buttons
+            document.querySelectorAll('.connect-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const targetNode = parseInt(btn.dataset.target);
+                    this.addConnection(nodeId, targetNode);
+                });
+            });
+        } else {
+            recommendations.innerHTML = '<strong>No recommendations available</strong>';
+        }
+
         nodeInfo.style.display = 'block';
     }
 
-    getRecommendations(nodeId) {
-        const currentFriends = new Set(this.getFriends(nodeId).map(f => f.id));
-        currentFriends.add(nodeId); // Exclude self
-        
-        const recommendations = this.nodeData
-            .filter(node => !currentFriends.has(node.id))
-            .map(node => ({
-                node,
-                score: node.pagerank
-            }))
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 3);
-            
-        return recommendations;
-    }
+    addConnection(source, target) {
+        if (!this.graphData) return;
 
-    connectNodes(sourceId, targetId) {
         // Add new edge
-        this.edgeData.push({ source: sourceId, target: targetId });
+        this.graphData.edges.push({ source, target });
         
         // Recompute PageRank
-        this.recomputePageRank();
-        
-        // Update visualization
-        this.graph.updateData(this.nodeData, this.edgeData);
-        this.initTable();
-        
-        // Refresh node info
-        const node = this.nodeData.find(n => n.id === sourceId);
-        this.showNodeInfo(node);
-        
-        console.log(`Connected nodes ${sourceId} and ${targetId}`);
+        this.computePageRank();
+        this.showNotification(`Connected node ${source} to node ${target}`, 'success');
     }
 
-    async recomputePageRank() {
-        this.pageRankScores = await computePageRank(this.nodeData, this.edgeData);
+    renderGraph() {
+        if (!this.graphData) return;
         
-        // Update node data with new PageRank scores
-        this.nodeData.forEach(node => {
-            node.pagerank = this.pageRankScores[node.id];
-        });
+        if (window.graphVisualization) {
+            window.graphVisualization.destroy();
+        }
+        
+        window.graphVisualization = new GraphVisualization(
+            'graph',
+            this.graphData,
+            (nodeId) => this.selectNode(nodeId)
+        );
+    }
+
+    updateGraphVisualization() {
+        if (window.graphVisualization && this.graphData) {
+            window.graphVisualization.updateData(this.graphData, this.pageRankScores);
+        }
+    }
+
+    showNotification(message, type) {
+        // Simple notification - in a real app you might want a more sophisticated system
+        console.log(`${type.toUpperCase()}: ${message}`);
     }
 }
 
 // Initialize the application when the page loads
-let app;
 document.addEventListener('DOMContentLoaded', () => {
-    app = new PageRankApp();
+    window.app = new SocialNetworkApp();
 });
