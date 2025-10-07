@@ -1,80 +1,83 @@
 // pagerank.js
 /**
- * Computes PageRank scores for nodes in a graph using TensorFlow.js
- * @param {Array} nodes - Array of node objects with id property
- * @param {Array} edges - Array of edge objects with source and target properties
+ * Computes PageRank scores for a graph using TensorFlow.js
+ * @param {number[][]} adjacencyMatrix - Adjacency matrix of the graph
  * @param {number} dampingFactor - Damping factor (typically 0.85)
- * @param {number} iterations - Number of iterations to run
- * @returns {Promise<Object>} Object mapping node IDs to PageRank scores
+ * @param {number} maxIterations - Maximum number of iterations
+ * @param {number} tolerance - Convergence tolerance
+ * @returns {Promise<number[]>} Array of PageRank scores
  */
-async function computePageRank(nodes, edges, dampingFactor = 0.85, iterations = 50) {
-    // Create node ID to index mapping
-    const nodeIndexMap = new Map();
-    nodes.forEach((node, index) => {
-        nodeIndexMap.set(node.id, index);
-    });
+async function computePageRankScores(
+    adjacencyMatrix, 
+    dampingFactor = 0.85, 
+    maxIterations = 50,
+    tolerance = 1e-6
+) {
+    const numNodes = adjacencyMatrix.length;
     
-    const n = nodes.length;
+    // Convert adjacency matrix to TensorFlow tensors
+    const adjacencyTensor = tf.tensor2d(adjacencyMatrix, [numNodes, numNodes], 'float32');
     
-    // Build adjacency matrix as a 2D array
-    const adjacencyMatrix = Array(n).fill().map(() => Array(n).fill(0));
-    
-    edges.forEach(edge => {
-        const sourceIndex = nodeIndexMap.get(edge.source);
-        const targetIndex = nodeIndexMap.get(edge.target);
-        
-        if (sourceIndex !== undefined && targetIndex !== undefined) {
-            // For undirected graph, add connections in both directions
-            adjacencyMatrix[sourceIndex][targetIndex] = 1;
-            adjacencyMatrix[targetIndex][sourceIndex] = 1;
-        }
-    });
-    
-    // Convert to TensorFlow tensors
-    const adjacencyTensor = tf.tensor2d(adjacencyMatrix, [n, n], 'float32');
-    
-    // Create stochastic matrix (transition probabilities)
-    const outDegree = tf.sum(adjacencyTensor, 1);
-    const stochasticMatrix = adjacencyTensor.div(outDegree.reshape([n, 1]));
-    
-    // Handle dangling nodes (nodes with no outgoing links)
-    const danglingMask = tf.equal(outDegree, 0);
-    const uniformDistribution = tf.ones([n, n]).div(tf.scalar(n));
-    const finalStochastic = stochasticMatrix.add(
-        uniformDistribution.mul(danglingMask.reshape([n, 1]).cast('float32'))
+    // Create degree vector
+    const degrees = adjacencyMatrix.map(row => 
+        row.reduce((sum, val) => sum + val, 0)
     );
+    const degreeTensor = tf.tensor1d(degrees, 'float32');
     
-    // Apply damping factor
-    const teleportation = tf.ones([n, n]).div(tf.scalar(n));
-    const transitionMatrix = finalStochastic.mul(tf.scalar(dampingFactor))
-        .add(teleportation.mul(tf.scalar(1 - dampingFactor)));
+    // Create transition matrix (column-normalized adjacency matrix)
+    const transitionMatrix = tf.div(adjacencyTensor, degreeTensor.add(1e-8));
+    
+    // Create teleportation matrix (uniform)
+    const teleportationMatrix = tf.ones([numNodes, numNodes], 'float32').div(numNodes);
     
     // Initialize PageRank vector (uniform distribution)
-    let pagerank = tf.ones([n, 1]).div(tf.scalar(n));
+    let pagerank = tf.ones([numNodes], 'float32').div(numNodes);
     
     // Power iteration
-    for (let i = 0; i < iterations; i++) {
-        pagerank = transitionMatrix.matMul(pagerank);
+    const dampingTensor = tf.scalar(dampingFactor, 'float32');
+    const oneMinusDamping = tf.scalar(1 - dampingFactor, 'float32');
+    
+    let previousPagerank;
+    
+    for (let iter = 0; iter < maxIterations; iter++) {
+        previousPagerank = pagerank;
         
-        // Normalize to ensure it sums to 1
-        const sum = tf.sum(pagerank);
-        pagerank = pagerank.div(sum);
+        // pagerank = damping * transitionMatrix * pagerank + (1-damping) * teleportationMatrix * pagerank
+        const term1 = tf.matMul(transitionMatrix.transpose(), pagerank.reshape([numNodes, 1]));
+        const term2 = tf.matMul(teleportationMatrix.transpose(), pagerank.reshape([numNodes, 1]));
+        
+        pagerank = tf.add(
+            tf.mul(dampingTensor, term1.reshape([numNodes])),
+            tf.mul(oneMinusDamping, term2.reshape([numNodes]))
+        );
+        
+        // Check for convergence
+        const diff = tf.norm(tf.sub(pagerank, previousPagerank));
+        const diffValue = await diff.data();
+        
+        if (diffValue[0] < tolerance) {
+            console.log(`PageRank converged after ${iter + 1} iterations`);
+            break;
+        }
+        
+        // Clean up tensors to avoid memory leaks
+        tf.dispose([term1, term2, diff]);
+        if (iter > 0) {
+            tf.dispose(previousPagerank);
+        }
     }
     
-    // Convert to JavaScript array and create node ID to score mapping
+    // Normalize the final PageRank vector
+    const sum = pagerank.sum();
+    pagerank = pagerank.div(sum);
+    
+    // Convert to JavaScript array and clean up
     const pagerankArray = await pagerank.data();
-    const scores = {};
     
-    nodes.forEach((node, index) => {
-        scores[node.id] = pagerankArray[index];
-    });
-    
-    // Clean up tensors to free memory
     tf.dispose([
-        adjacencyTensor, outDegree, stochasticMatrix, danglingMask,
-        uniformDistribution, finalStochastic, teleportation,
-        transitionMatrix, pagerank
+        adjacencyTensor, degreeTensor, transitionMatrix, teleportationMatrix,
+        dampingTensor, oneMinusDamping, previousPagerank, sum
     ]);
     
-    return scores;
+    return Array.from(pagerankArray);
 }
