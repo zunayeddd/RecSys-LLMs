@@ -1,113 +1,107 @@
 // graph.js
-const graphVisualization = {
-    svg: null,
-    simulation: null,
-    
-    render(graph, pagerankScores, selectedNode = null) {
-        const container = document.getElementById('graph');
-        container.innerHTML = '';
+class GraphVisualization {
+    constructor(containerId) {
+        this.containerId = containerId;
+        this.svg = null;
+        this.simulation = null;
+        this.nodes = [];
+        this.links = [];
+        this.colorScale = null;
+        this.radiusScale = null;
+    }
+
+    render(graphData) {
+        // Clear previous visualization
+        d3.select(`#${this.containerId}`).html('');
         
+        const container = document.getElementById(this.containerId);
         const width = container.clientWidth;
         const height = container.clientHeight;
         
-        this.svg = d3.select('#graph')
+        // Create SVG
+        this.svg = d3.select(`#${this.containerId}`)
             .append('svg')
             .attr('width', width)
             .attr('height', height);
         
-        // Calculate node sizes based on PageRank scores
-        const scores = pagerankScores ? Object.values(pagerankScores) : [];
-        const minScore = scores.length > 0 ? Math.min(...scores) : 0;
-        const maxScore = scores.length > 0 ? Math.max(...scores) : 1;
+        this.nodes = graphData.nodes;
+        this.links = graphData.edges.map(edge => ({
+            source: edge.source,
+            target: edge.target
+        }));
         
-        const scaleNodeSize = d3.scaleLinear()
-            .domain([minScore, maxScore])
-            .range([5, 20]);
+        // Initialize color and radius scales
+        this.colorScale = d3.scaleSequential(d3.interpolateBlues)
+            .domain([0, 1]);
         
-        const scaleColor = d3.scaleSequential(d3.interpolateBlues)
-            .domain([minScore, maxScore]);
+        this.radiusScale = d3.scaleSqrt()
+            .domain([0, 1])
+            .range([3, 10]);
+        
+        // Create simulation
+        this.simulation = d3.forceSimulation(this.nodes)
+            .force('link', d3.forceLink(this.links).id(d => d.id).distance(50))
+            .force('charge', d3.forceManyBody().strength(-100))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(12));
         
         // Create links
-        const links = this.svg.append('g')
+        const link = this.svg.append('g')
             .selectAll('line')
-            .data(graph.edges)
-            .enter()
-            .append('line')
+            .data(this.links)
+            .join('line')
             .attr('stroke', '#999')
             .attr('stroke-opacity', 0.6)
             .attr('stroke-width', 1);
         
         // Create nodes
-        const nodes = this.svg.append('g')
+        const node = this.svg.append('g')
             .selectAll('circle')
-            .data(graph.nodes)
-            .enter()
-            .append('circle')
-            .attr('r', d => {
-                if (!pagerankScores) return 8;
-                return scaleNodeSize(pagerankScores[d.id]);
-            })
-            .attr('fill', d => {
-                if (!pagerankScores) return '#69b3a2';
-                return scaleColor(pagerankScores[d.id]);
-            })
-            .attr('stroke', d => d.id === selectedNode ? '#ff0000' : '#fff')
-            .attr('stroke-width', d => d.id === selectedNode ? 3 : 2)
-            .call(d3.drag()
-                .on('start', (event, d) => this.dragStarted(event, d))
-                .on('drag', (event, d) => this.dragged(event, d))
-                .on('end', (event, d) => this.dragEnded(event, d)));
+            .data(this.nodes)
+            .join('circle')
+            .attr('r', 5)
+            .attr('fill', '#4285f4')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 1.5)
+            .call(this.drag(this.simulation));
         
         // Add node labels
-        const labels = this.svg.append('g')
+        const label = this.svg.append('g')
             .selectAll('text')
-            .data(graph.nodes)
-            .enter()
-            .append('text')
+            .data(this.nodes)
+            .join('text')
             .text(d => d.id)
             .attr('font-size', '10px')
-            .attr('text-anchor', 'middle')
-            .attr('dy', '0.3em')
+            .attr('dx', 8)
+            .attr('dy', 3)
             .attr('fill', '#333');
         
         // Add tooltips
-        nodes.append('title')
-            .text(d => {
-                const score = pagerankScores ? pagerankScores[d.id] : 'N/A';
-                return `Node ${d.id}\nPageRank: ${typeof score === 'number' ? score.toFixed(4) : score}`;
-            });
+        node.append('title')
+            .text(d => `Node ${d.id}`);
         
-        // Set up force simulation
-        this.simulation = d3.forceSimulation(graph.nodes)
-            .force('link', d3.forceLink(graph.edges).id(d => d.id).distance(100))
-            .force('charge', d3.forceManyBody().strength(-300))
-            .force('center', d3.forceCenter(width / 2, height / 2))
-            .force('collision', d3.forceCollide().radius(d => {
-                if (!pagerankScores) return 12;
-                return scaleNodeSize(pagerankScores[d.id]) + 5;
-            }));
+        // Add click handlers
+        node.on('click', (event, d) => {
+            if (window.app) {
+                window.app.handleNodeClick(d.id);
+            }
+        });
         
         // Update positions on simulation tick
         this.simulation.on('tick', () => {
-            links
+            link
                 .attr('x1', d => d.source.x)
                 .attr('y1', d => d.source.y)
                 .attr('x2', d => d.target.x)
                 .attr('y2', d => d.target.y);
             
-            nodes
+            node
                 .attr('cx', d => d.x)
                 .attr('cy', d => d.y);
             
-            labels
+            label
                 .attr('x', d => d.x)
                 .attr('y', d => d.y);
-        });
-        
-        // Add click handlers
-        nodes.on('click', (event, d) => {
-            event.stopPropagation();
-            app.selectNode(d.id);
         });
         
         // Add zoom behavior
@@ -118,22 +112,77 @@ const graphVisualization = {
             });
         
         this.svg.call(zoom);
-    },
-    
-    dragStarted(event, d) {
-        if (!event.active) this.simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
-    },
-    
-    dragged(event, d) {
-        d.fx = event.x;
-        d.fy = event.y;
-    },
-    
-    dragEnded(event, d) {
-        if (!event.active) this.simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
     }
-};
+
+    updateNodeScores(scores) {
+        if (!this.svg || !scores) return;
+        
+        // Normalize scores for visualization
+        const scoreValues = Object.values(scores);
+        const minScore = Math.min(...scoreValues);
+        const maxScore = Math.max(...scoreValues);
+        
+        this.colorScale.domain([minScore, maxScore]);
+        this.radiusScale.domain([minScore, maxScore]);
+        
+        // Update node appearance
+        this.svg.selectAll('circle')
+            .transition()
+            .duration(1000)
+            .attr('fill', d => this.colorScale(scores[d.id]))
+            .attr('r', d => this.radiusScale(scores[d.id]));
+        
+        // Update tooltips with scores
+        this.svg.selectAll('circle')
+            .select('title')
+            .text(d => `Node ${d.id}\nPageRank: ${scores[d.id].toFixed(6)}`);
+    }
+
+    highlightNode(nodeId) {
+        // Reset all nodes
+        this.svg.selectAll('circle')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 1.5);
+        
+        // Highlight selected node
+        this.svg.selectAll('circle')
+            .filter(d => d.id === nodeId)
+            .attr('stroke', '#ff6b6b')
+            .attr('stroke-width', 3);
+        
+        // Highlight connected links
+        this.svg.selectAll('line')
+            .attr('stroke', '#999')
+            .attr('stroke-opacity', 0.6);
+        
+        this.svg.selectAll('line')
+            .filter(d => d.source.id === nodeId || d.target.id === nodeId)
+            .attr('stroke', '#ff6b6b')
+            .attr('stroke-opacity', 1)
+            .attr('stroke-width', 2);
+    }
+
+    drag(simulation) {
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+        
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+        
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+        
+        return d3.drag()
+            .on('start', dragstarted)
+            .on('drag', dragged)
+            .on('end', dragended);
+    }
+}
