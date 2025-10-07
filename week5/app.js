@@ -23,6 +23,7 @@ class SocialNetworkApp {
             this.renderGraph();
             this.showNotification('Demo data loaded successfully!', 'success');
         } catch (error) {
+            console.log(error)
             this.showNotification('Error loading demo data: ' + error.message, 'error');
         }
     }
@@ -89,6 +90,7 @@ class SocialNetworkApp {
             this.updateGraphVisualization();
             this.showNotification('PageRank computation completed!', 'success');
         } catch (error) {
+            console.log(error)
             this.showNotification('Error computing PageRank: ' + error.message, 'error');
         }
     }
