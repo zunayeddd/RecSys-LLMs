@@ -14,8 +14,10 @@ const pagerank = {
         graph.edges.forEach(edge => {
             const i = nodeIndexMap[edge.source];
             const j = nodeIndexMap[edge.target];
-            adjacencyMatrix[i][j] = 1;
-            adjacencyMatrix[j][i] = 1; // Undirected graph
+            if (i !== undefined && j !== undefined) {
+                adjacencyMatrix[i][j] = 1;
+                adjacencyMatrix[j][i] = 1; // Undirected graph
+            }
         });
         
         // Convert to column-stochastic matrix
@@ -46,6 +48,7 @@ const pagerank = {
         // Clean up tensors
         M.dispose();
         pagerankVector.dispose();
+        dampingVector.dispose();
         
         return result;
     },
