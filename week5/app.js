@@ -231,6 +231,6 @@ class SocialNetworkApp {
 }
 
 // Initialize the application when the page loads
-document.addEventListener('DOMContentLoaded', () => {
-    window.app = new SocialNetworkApp();
-});
+// document.addEventListener('DOMContentLoaded', () => {
+//     window.app = new SocialNetworkApp();
+// });
