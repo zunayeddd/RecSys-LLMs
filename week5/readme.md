@@ -41,5 +41,4 @@ Assume the following project structure:
 The UI must allow:  
 - Data load and graph rendering  
 - PageRank computation and scores visualization  
-- Node/table click, showing friends and top-3 recommended new friends  
----
+- Table click, highliting the node in the graph and recommend top 3 friends
