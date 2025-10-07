@@ -1,94 +1,80 @@
 // pagerank.js
 /**
  * Computes PageRank scores for nodes in a graph using TensorFlow.js
- * @param {Object} graphData - Graph data with nodes and edges
+ * @param {Array} nodes - Array of node objects with id property
+ * @param {Array} edges - Array of edge objects with source and target properties
  * @param {number} dampingFactor - Damping factor (typically 0.85)
- * @param {number} maxIterations - Maximum number of iterations
+ * @param {number} iterations - Number of iterations to run
  * @returns {Promise<Object>} Object mapping node IDs to PageRank scores
  */
-async function computePageRank(graphData, dampingFactor = 0.85, maxIterations = 50) {
-    // Create node index mapping
-    const nodes = graphData.nodes.map(node => node.id);
-    const nodeIndex = {};
-    nodes.forEach((nodeId, index) => {
-        nodeIndex[nodeId] = index;
+async function computePageRank(nodes, edges, dampingFactor = 0.85, iterations = 50) {
+    // Create node ID to index mapping
+    const nodeIndexMap = new Map();
+    nodes.forEach((node, index) => {
+        nodeIndexMap.set(node.id, index);
     });
     
     const n = nodes.length;
     
-    // Build adjacency matrix and out-degree vector
+    // Build adjacency matrix as a 2D array
     const adjacencyMatrix = Array(n).fill().map(() => Array(n).fill(0));
-    const outDegree = Array(n).fill(0);
     
-    graphData.edges.forEach(edge => {
-        const i = nodeIndex[edge.source];
-        const j = nodeIndex[edge.target];
+    edges.forEach(edge => {
+        const sourceIndex = nodeIndexMap.get(edge.source);
+        const targetIndex = nodeIndexMap.get(edge.target);
         
-        // For undirected graph, add connections in both directions
-        adjacencyMatrix[i][j] = 1;
-        adjacencyMatrix[j][i] = 1;
-        
-        outDegree[i]++;
-        outDegree[j]++;
+        if (sourceIndex !== undefined && targetIndex !== undefined) {
+            // For undirected graph, add connections in both directions
+            adjacencyMatrix[sourceIndex][targetIndex] = 1;
+            adjacencyMatrix[targetIndex][sourceIndex] = 1;
+        }
     });
     
     // Convert to TensorFlow tensors
-    const tf = await import('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js');
+    const adjacencyTensor = tf.tensor2d(adjacencyMatrix, [n, n], 'float32');
     
-    // Create transition probability matrix
-    const transitionMatrix = [];
-    for (let i = 0; i < n; i++) {
-        const row = [];
-        for (let j = 0; j < n; j++) {
-            if (outDegree[i] > 0) {
-                row.push(adjacencyMatrix[i][j] / outDegree[i]);
-            } else {
-                // Handle dangling nodes by distributing probability evenly
-                row.push(1 / n);
-            }
-        }
-        transitionMatrix.push(row);
-    }
+    // Create stochastic matrix (transition probabilities)
+    const outDegree = tf.sum(adjacencyTensor, 1);
+    const stochasticMatrix = adjacencyTensor.div(outDegree.reshape([n, 1]));
     
-    const M = tf.tensor2d(transitionMatrix);
-    const d = tf.scalar(dampingFactor);
-    const oneMinusD = tf.scalar(1 - dampingFactor);
-    const nScalar = tf.scalar(n);
-    const uniformVector = tf.fill([n, 1], 1 / n);
+    // Handle dangling nodes (nodes with no outgoing links)
+    const danglingMask = tf.equal(outDegree, 0);
+    const uniformDistribution = tf.ones([n, n]).div(tf.scalar(n));
+    const finalStochastic = stochasticMatrix.add(
+        uniformDistribution.mul(danglingMask.reshape([n, 1]).cast('float32'))
+    );
     
-    // Initialize PageRank vector
-    let p = tf.fill([n, 1], 1 / n);
+    // Apply damping factor
+    const teleportation = tf.ones([n, n]).div(tf.scalar(n));
+    const transitionMatrix = finalStochastic.mul(tf.scalar(dampingFactor))
+        .add(teleportation.mul(tf.scalar(1 - dampingFactor)));
     
-    // Iterative PageRank computation
-    for (let iter = 0; iter < maxIterations; iter++) {
-        const newP = tf.add(
-            tf.mul(tf.matMul(M, p), d),
-            tf.mul(uniformVector, oneMinusD)
-        );
+    // Initialize PageRank vector (uniform distribution)
+    let pagerank = tf.ones([n, 1]).div(tf.scalar(n));
+    
+    // Power iteration
+    for (let i = 0; i < iterations; i++) {
+        pagerank = transitionMatrix.matMul(pagerank);
         
-        // Clean up old tensor
-        if (iter > 0) {
-            p.dispose();
-        }
-        p = newP;
+        // Normalize to ensure it sums to 1
+        const sum = tf.sum(pagerank);
+        pagerank = pagerank.div(sum);
     }
     
-    // Convert result to JavaScript array
-    const pArray = await p.data();
-    
-    // Create mapping from node ID to PageRank score
+    // Convert to JavaScript array and create node ID to score mapping
+    const pagerankArray = await pagerank.data();
     const scores = {};
-    nodes.forEach((nodeId, index) => {
-        scores[nodeId] = pArray[index];
+    
+    nodes.forEach((node, index) => {
+        scores[node.id] = pagerankArray[index];
     });
     
-    // Clean up tensors
-    M.dispose();
-    d.dispose();
-    oneMinusD.dispose();
-    nScalar.dispose();
-    uniformVector.dispose();
-    p.dispose();
+    // Clean up tensors to free memory
+    tf.dispose([
+        adjacencyTensor, outDegree, stochasticMatrix, danglingMask,
+        uniformDistribution, finalStochastic, teleportation,
+        transitionMatrix, pagerank
+    ]);
     
     return scores;
 }
