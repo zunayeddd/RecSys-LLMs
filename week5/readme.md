@@ -42,6 +42,4 @@ The UI must allow:
 - Data load and graph rendering  
 - PageRank computation and scores visualization  
 - Node/table click, showing friends and top-3 recommended new friends  
-- Optional: “Connect” to simulate new edges and graph update
-
 ---
